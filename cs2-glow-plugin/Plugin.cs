@@ -2,6 +2,7 @@
 using CounterStrikeSharp.API.Core;
 using CounterStrikeSharp.API.Core.Attributes.Registration;
 using CounterStrikeSharp.API.Modules.Commands;
+using CounterStrikeSharp.API.Modules.Commands.Targeting;
 using CounterStrikeSharp.API.Modules.Entities;
 using CounterStrikeSharp.API.Modules.Timers;
 using CounterStrikeSharp.API.Modules.Utils;
@@ -15,6 +16,8 @@ public class Plugin : BasePlugin
 
     public override string ModuleVersion => "1.0";
 
+    private ulong lastBenefittingPlayerId;
+
     public override void Load(bool hotReload)
     {
         Console.WriteLine($"cs2-glow-plugin {(hotReload ? "HOT" : "COLD")} loaded!");
@@ -23,9 +26,9 @@ public class Plugin : BasePlugin
 
     [ConsoleCommand("give_wallhack", "gives a player wallhacks")]
     [CommandHelper(minArgs: 1, usage: "[target]", CommandUsage.SERVER_ONLY)]
-    public void GiveWalls(CCSPlayerController? player, CommandInfo command)
+    public void GiveWalls(CCSPlayerController? CommandSendingPlayer, CommandInfo command)
     {
-        if (player is not null)
+        if (CommandSendingPlayer is not null)
         {
             Console.WriteLine("Command was sent by player, ignoring.");
             return;
@@ -46,20 +49,46 @@ public class Plugin : BasePlugin
             return;
         }
 
-        var sufferingPlayers = AllPlayers.Where(p => p.SteamID != BenefittingPlayer.SteamID);
+        ApplyGlowToAllOtherPlayers(BenefittingPlayer.SteamID);
 
-        foreach (CCSPlayerController suffering in sufferingPlayers)
-        {
-            if (player is not null)
-            {
-                SetGlowing(player);
-            }
-        }
 
-        Console.WriteLine($"benefitting player {BenefittingPlayer.PlayerName} ({BenefittingPlayer.SteamID})");
 
         Console.WriteLine("Custom command called.");
     }
+
+
+    private void ApplyGlowToAllOtherPlayers(ulong playerId)
+    {
+
+        var AllPlayers = GetPlayers();
+
+        var sufferingPlayers = AllPlayers.Where(p => p.SteamID != playerId);
+        var benefittingPlayer = AllPlayers.First(p =>  p.SteamID == playerId);
+
+        foreach (CCSPlayerController suffering in sufferingPlayers)
+        {
+            Console.WriteLine($"going to add glow to player {suffering.PlayerName}");
+            if (suffering is not null)
+            {
+                SetGlowing(suffering, benefittingPlayer.TeamNum);
+            }
+        }
+        lastBenefittingPlayerId = benefittingPlayer.SteamID;
+
+        Console.WriteLine($"benefitting player {benefittingPlayer.PlayerName} ({benefittingPlayer.SteamID})");
+    }
+
+    [GameEventHandler]
+    public HookResult OnRoundStart(EventRoundStart gameEvent, GameEventInfo info)
+    {
+        if (lastBenefittingPlayerId != null)
+        {
+            ApplyGlowToAllOtherPlayers(lastBenefittingPlayerId);
+        }
+
+        return HookResult.Continue;
+    }
+
 
     IEnumerable<CCSPlayerController> GetPlayers()
     {
@@ -70,14 +99,14 @@ public class Plugin : BasePlugin
             var p = Utilities.GetPlayerFromSlot(i);
             if (p is not null)
             {
-                Console.WriteLine($"{p.PlayerName}");
+                Console.WriteLine($"found player {p.PlayerName}");
                 output.Add(p);
             }
         }
         return output;
     }
 
-    void SetGlowing(CCSPlayerController player)
+    void SetGlowing(CCSPlayerController player, int team)
     {
         Console.WriteLine($"Adding glow to {player.PlayerName}");
         var pawn = player.PlayerPawn.Value;
@@ -104,9 +133,9 @@ public class Plugin : BasePlugin
         modelGlow.Spawnflags = 256u;
         modelGlow.DispatchSpawn();
 
-        modelGlow.Glow.GlowColorOverride = Color.Red;
+        modelGlow.Glow.GlowColorOverride = Color.Blue;
         modelGlow.Glow.GlowRange = 5000;
-        modelGlow.Glow.GlowTeam = -1;
+        modelGlow.Glow.GlowTeam = team;
         modelGlow.Glow.GlowType = 3;
         modelGlow.Glow.GlowRangeMin = 100;
 

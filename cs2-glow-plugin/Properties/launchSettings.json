@@ -1,0 +1,7 @@
+{
+  "profiles": {
+    "cs2-glow-plugin": {
+      "commandName": "Project"
+    }
+  }
+}
